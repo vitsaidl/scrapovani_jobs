@@ -117,6 +117,10 @@ class InzeratyJobsSpider(scrapy.Spider):
                'titulka_csharp' : obsahuje_c_sharp(ocistena_pozice),
                'titulka_sql' : obsahuje_sql(ocistena_pozice),
                'titulka_scala' : obsahuje_scala(ocistena_pozice),
+               'titulka_elasticsearch' : obsahuje_elasticsearch(ocistena_pozice),
+               'titulka_cpp' : obsahuje_cpp(ocistena_pozice),
+               'titulka_netsuite' : obsahuje_netsuite(ocistena_pozice),
+               'titulka_keras' : obsahuje_keras(ocistena_pozice),
                'inzerat' : telo_inzeratu,
                'inzerat_python' : obsahuje_python_inzerat(telo_inzeratu),
                'inzerat_java' : obsahuje_java_inzerat(telo_inzeratu),
@@ -124,6 +128,10 @@ class InzeratyJobsSpider(scrapy.Spider):
                'inzerat_csharp' : obsahuje_c_sharp_inzerat(telo_inzeratu),
                'inzerat_sql' : obsahuje_sql_inzerat(telo_inzeratu),
                'inzerat_scala' : obsahuje_sql_inzerat(telo_inzeratu),
+               'inzerat_elasticsearch' : obsahuje_elasticsearch_inzerat(telo_inzeratu),
+               'inzerat_cpp' : obsahuje_cpp_inzerat(telo_inzeratu),
+               'inzerat_netsuite' : obsahuje_netsuite_inzerat(telo_inzeratu),
+               'inzerat_keras' : obsahuje_keras_inzerat(telo_inzeratu),
                }
 
     def closed(self, reason):
@@ -275,6 +283,26 @@ def obsahuje_scala(popis_pozice):
     """
     return obsahuje_retezec(popis_pozice, "scala")
 
+def obsahuje_elasticsearch(popis_pozice):
+    """Kontroluje, zda se v titulce inzerátu objevuje Elastisearch
+    """
+    return obsahuje_retezec(popis_pozice, "elasticsearch") or obsahuje_retezec(popis_pozice, "kibana")
+
+def obsahuje_cpp(popis_pozice):
+    """Kontroluje, zda se v titulce inzerátu objevuje C++
+    """
+    return obsahuje_retezec(popis_pozice, "c++")
+
+def obsahuje_netsuite(popis_pozice):
+    """Kontroluje, zda se v titulce inzerátu objevuje Netsuite
+    """
+    return obsahuje_retezec(popis_pozice, "netsuite")
+
+def obsahuje_keras(popis_pozice):
+    """Kontroluje, zda se v titulce inzerátu objevuje Keras
+    """
+    return obsahuje_retezec(popis_pozice, "keras")
+
 def obsahuje_python_inzerat(inzerat):
     """Kontroluje, zda se v těle inzerátu objevuje Python
     """
@@ -317,6 +345,34 @@ def obsahuje_scala_inzerat(inzerat):
     popis_pozice = " ".join(inzerat)
     return obsahuje_scala(popis_pozice)
 
+def obsahuje_elasticsearch_inzerat(inzerat):
+    """Kontroluje, zda se v těle inzerátu objevuje Elasticsearch
+    """
+    #inzerat je fakticky list, ktery chceme slozit v jeden string
+    popis_pozice = " ".join(inzerat)
+    return obsahuje_elasticsearch(popis_pozice)
+
+def obsahuje_cpp_inzerat(inzerat):
+    """Kontroluje, zda se v těle inzerátu objevuje C++
+    """
+    #inzerat je fakticky list, ktery chceme slozit v jeden string
+    popis_pozice = " ".join(inzerat)
+    return obsahuje_cpp(popis_pozice)
+
+def obsahuje_netsuite_inzerat(inzerat):
+    """Kontroluje, zda se v těle inzerátu objevuje Netsuite
+    """
+    #inzerat je fakticky list, ktery chceme slozit v jeden string
+    popis_pozice = " ".join(inzerat)
+    return obsahuje_netsuite(popis_pozice)
+
+def obsahuje_keras_inzerat(inzerat):
+    """Kontroluje, zda se v těle inzerátu objevuje Keras
+    """
+    #inzerat je fakticky list, ktery chceme slozit v jeden string
+    popis_pozice = " ".join(inzerat)
+    return obsahuje_keras(popis_pozice)
+
 def priprava_framu():
     """Načítá data do pandího dataframu a upravuje je
 
@@ -357,12 +413,20 @@ def vrat_slovnik_sum(dataframe_inzeraty):
         "titulka_csharp" : int(dataframe_inzeraty["titulka_csharp"].sum()),
         "titulka_sql" : int(dataframe_inzeraty["titulka_sql"].sum()),
         "titulka_scala" : int(dataframe_inzeraty["titulka_scala"].sum()),
+        "titulka_elasticsearch" : int(dataframe_inzeraty["titulka_elasticsearch"].sum()),
+        "titulka_cpp" : int(dataframe_inzeraty["titulka_cpp"].sum()),
+        "titulka_netsuite" : int(dataframe_inzeraty["titulka_netsuite"].sum()),
+        "titulka_keras" : int(dataframe_inzeraty["titulka_keras"].sum()),
         "inzerat_python" : int(dataframe_inzeraty["inzerat_python"].sum()),
         "inzerat_java" : int(dataframe_inzeraty["inzerat_java"].sum()),
         "inzerat_js" : int(dataframe_inzeraty["inzerat_javascript"].sum()),
         "inzerat_csharp" : int(dataframe_inzeraty["inzerat_csharp"].sum()),
         "inzerat_sql" : int(dataframe_inzeraty["inzerat_sql"].sum()),
         "inzerat_scala" : int(dataframe_inzeraty["inzerat_scala"].sum()),
+        "inzerat_elasticsearch" : int(dataframe_inzeraty["inzerat_elasticsearch"].sum()),
+        "inzerat_cpp" : int(dataframe_inzeraty["inzerat_cpp"].sum()),
+        "inzerat_netsuite" : int(dataframe_inzeraty["inzerat_netsuite"].sum()),
+        "inzerat_keras" : int(dataframe_inzeraty["inzerat_keras"].sum()),
         }
     return slovnik_sum_technologii
 
@@ -389,20 +453,30 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu):
 
     plt.clf()
     #graf - boxplot - srovnavajici zastoupeni technologii
-    stredy_baru = np.arange(6)
     titulky_sumy = (pocet_vyskytu["titulka_python"],
                     pocet_vyskytu["titulka_java"],
                     pocet_vyskytu["titulka_js"],
                     pocet_vyskytu["titulka_csharp"],
                     pocet_vyskytu["titulka_sql"],
-                    pocet_vyskytu["titulka_scala"])
+                    pocet_vyskytu["titulka_scala"],
+                    pocet_vyskytu["titulka_elasticsearch"],
+                    pocet_vyskytu["titulka_cpp"],
+                    pocet_vyskytu["titulka_netsuite"],
+                    pocet_vyskytu["titulka_keras"]
+                    )
     inzeraty_sumy = (pocet_vyskytu["inzerat_python"],
                      pocet_vyskytu["inzerat_java"],
                      pocet_vyskytu["inzerat_js"],
                      pocet_vyskytu["inzerat_csharp"],
                      pocet_vyskytu["inzerat_sql"],
-                     pocet_vyskytu["inzerat_scala"])
+                     pocet_vyskytu["inzerat_scala"],
+                     pocet_vyskytu["inzerat_elasticsearch"],
+                     pocet_vyskytu["inzerat_cpp"],
+                     pocet_vyskytu["inzerat_netsuite"],
+                     pocet_vyskytu["inzerat_keras"]
+                     )
     osy = plt.axes()
+    stredy_baru = np.arange(len(titulky_sumy))
 
     #aby byly na yové ose jen integery
     osy.yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -417,7 +491,8 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu):
                             label="Těla inzerátů")
 
     osy.set_xticks(stredy_baru)
-    osy.set_xticklabels(("Python", "Java", "Javascript", "C#", "SQL", "Scala"))
+    osy.set_xticklabels(("Python", "Java", "Javascript", "C#", "SQL", "Scala",
+                         "Elasticsearch", "C++", "Netsuite", "Keras"))
     osy.legend()
     plt.title(f"Počet výskytů technologií v inzerátech na jobs.cz ({lokace})")
     plt.savefig(f".\\grafy\\srovnani_tech_{aktualni_datum()}.png")
