@@ -8,13 +8,15 @@ Created on Sun Jun 16 21:43:02 2019
 import datetime
 import os.path
 import re
-import fpdf
-import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 import numpy as np
 import pandas as pd
+import yaml
+import fpdf
+from matplotlib.ticker import MaxNLocator
+import matplotlib.pyplot as plt
 import scrapy
 from scrapy.crawler import CrawlerProcess
+
 
 class Pdf(fpdf.FPDF):
     """Třída umožňující narozdíl od defaultní fpdf.FPDF zobrazení zápatí
@@ -31,6 +33,9 @@ class InzeratyJobsSpider(scrapy.Spider):
     """
     name = 'inzeraty_for'
     start_urls = ['https://www.jobs.cz/prace/is-it-vyvoj-aplikaci-a-systemu/']
+
+    def __init__(self, *args):
+        self.technologies = args[0]["technologies"]
 
     def parse(self, response):
         """Defaultně volaná fce koukající na seznam inzerátů
@@ -102,37 +107,27 @@ class InzeratyJobsSpider(scrapy.Spider):
         else:
             telo_inzeratu = telo_inz_tmobile
 
-        yield {'pozice' : ocistena_pozice,
-               'zamestnavatel': usekej_bile_znaky_okraj(zamestnavatel),
-               'adresa': usekej_bile_znaky_okraj(adresa),
-               'Praha' : obsahuje_retezec(adresa, "praha"),
-               'plat': plat_bez_bilych_znaku,
-               'plat_min': plat_minimum,
-               'plat_max': plat_maximum,
-               'platnost od' : vrat_datum_z_timestampy(platnost_od),
-               'platnost do' : vrat_datum_z_timestampy(platnost_do),
-               'titulka_python' : obsahuje_python(ocistena_pozice),
-               'titulka_java' : obsahuje_java(ocistena_pozice),
-               'titulka_javascript' : obsahuje_javascript(ocistena_pozice),
-               'titulka_csharp' : obsahuje_c_sharp(ocistena_pozice),
-               'titulka_sql' : obsahuje_sql(ocistena_pozice),
-               'titulka_scala' : obsahuje_scala(ocistena_pozice),
-               'titulka_elasticsearch' : obsahuje_elasticsearch(ocistena_pozice),
-               'titulka_cpp' : obsahuje_cpp(ocistena_pozice),
-               'titulka_netsuite' : obsahuje_netsuite(ocistena_pozice),
-               'titulka_keras' : obsahuje_keras(ocistena_pozice),
-               'inzerat' : telo_inzeratu,
-               'inzerat_python' : obsahuje_python_inzerat(telo_inzeratu),
-               'inzerat_java' : obsahuje_java_inzerat(telo_inzeratu),
-               'inzerat_javascript' : obsahuje_javascript_inzerat(telo_inzeratu),
-               'inzerat_csharp' : obsahuje_c_sharp_inzerat(telo_inzeratu),
-               'inzerat_sql' : obsahuje_sql_inzerat(telo_inzeratu),
-               'inzerat_scala' : obsahuje_sql_inzerat(telo_inzeratu),
-               'inzerat_elasticsearch' : obsahuje_elasticsearch_inzerat(telo_inzeratu),
-               'inzerat_cpp' : obsahuje_cpp_inzerat(telo_inzeratu),
-               'inzerat_netsuite' : obsahuje_netsuite_inzerat(telo_inzeratu),
-               'inzerat_keras' : obsahuje_keras_inzerat(telo_inzeratu),
-               }
+        slovnik_informaci = {
+            'pozice' : ocistena_pozice,
+            'zamestnavatel': usekej_bile_znaky_okraj(zamestnavatel),
+            'adresa': usekej_bile_znaky_okraj(adresa),
+            'Praha' : obsahuje_retezec(adresa, "praha"),
+            'plat': plat_bez_bilych_znaku,
+            'plat_min': plat_minimum,
+            'plat_max': plat_maximum,
+            'platnost od' : vrat_datum_z_timestampy(platnost_od),
+            'platnost do' : vrat_datum_z_timestampy(platnost_do),
+            'inzerat' : telo_inzeratu,
+            }
+
+        for element in self.technologies:
+            klic_titulka = "titulka_" + element
+            klic_inzerat = "inzerat_" + element
+            inzerat_string = " ".join(telo_inzeratu)
+            slovnik_informaci[klic_titulka] = obsahuje_retezec(ocistena_pozice, element)
+            slovnik_informaci[klic_inzerat] = obsahuje_retezec(inzerat_string, element)
+
+        yield slovnik_informaci
 
     def closed(self, reason):
         """Fce volaná, když spider všechny stránky proleze
@@ -158,8 +153,6 @@ def smazani_dnesniho_souboru():
     if soubor_existuje:
         os.remove(f".\\scrapovana_data\\{jmeno_souboru}")
 
-
-
 def usekej_bile_znaky_okraj(retezec):
     """Vrací slovo očištěné o bíle znaky na začátku/konci řetězce, resp. "Neuvedeno"
 
@@ -174,8 +167,7 @@ def usekej_bile_znaky_okraj(retezec):
     """
     if retezec is None:
         return "Neuvedeno"
-    else:
-        return retezec.strip()
+    return retezec.strip()
 
 def usekej_bile_znaky_prostredek(retezec):
     """Hromadu bílých znaků uprostřed řetězce nahrazuje za jednu mezeru
@@ -202,8 +194,7 @@ def vrat_datum_z_timestampy(timestampa):
     if timestampa is not None:
         separovana_timestampa = timestampa.split("T")
         return separovana_timestampa[0]
-    else:
-        return "Neuvedeno"
+    return "Neuvedeno"
 
 def naparsuj_min_max_mzdu(platove_rozpeti):
     """Z řetězce vybere max a min hodnotu mzdy + přepočítá případné eura na koruny
@@ -235,7 +226,7 @@ def naparsuj_min_max_mzdu(platove_rozpeti):
     return minimum, maximum
 
 def obsahuje_retezec(text, retezec):
-    """Vrací Ture/False na zákadě toho, zda text obsahuje retezec
+    """Vrací True/False na zákadě toho, zda text obsahuje retezec
 
     Args:
         text (string): Text (titulka/tělo inzerátu), který je prohledáván
@@ -245,133 +236,14 @@ def obsahuje_retezec(text, retezec):
         bool: Informace o tom, zda e retezec v textu k nalezení
     """
     text = text.lower()
-    index_hledaneho = text.find(retezec)
-    if index_hledaneho == -1:
-        return False
+    retezec = retezec.lower()
+    #aby se do javy nezapocitaval i javascript
+    if retezec == "java":
+        matchnuti = re.search("java[^s]", text)
+        index_hledaneho = 1 if matchnuti is not None else -1
     else:
-        return True
-
-def obsahuje_python(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Python
-    """
-    return obsahuje_retezec(popis_pozice, "python")
-
-def obsahuje_javascript(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Javascript, Angular či React
-    """
-    #mezery na obe stranykonci, neb by to mohlo chytat i jina slova (pred se chyta na Node.js)
-    return (obsahuje_retezec(popis_pozice, "javascript") or obsahuje_retezec(popis_pozice, "js ")
-            or obsahuje_retezec(popis_pozice, "angular") or obsahuje_retezec(popis_pozice, "react"))
-
-def obsahuje_java(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Java
-    """
-    return (obsahuje_retezec(popis_pozice, "java ") or obsahuje_retezec(popis_pozice, "java/"))
-
-def obsahuje_c_sharp(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje C#
-    """
-    return obsahuje_retezec(popis_pozice, "c#")
-
-def obsahuje_sql(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje SQL
-    """
-    return obsahuje_retezec(popis_pozice, "sql")
-
-def obsahuje_scala(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Scala
-    """
-    return obsahuje_retezec(popis_pozice, "scala")
-
-def obsahuje_elasticsearch(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Elastisearch
-    """
-    return obsahuje_retezec(popis_pozice, "elasticsearch") or obsahuje_retezec(popis_pozice, "kibana")
-
-def obsahuje_cpp(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje C++
-    """
-    return obsahuje_retezec(popis_pozice, "c++")
-
-def obsahuje_netsuite(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Netsuite
-    """
-    return obsahuje_retezec(popis_pozice, "netsuite")
-
-def obsahuje_keras(popis_pozice):
-    """Kontroluje, zda se v titulce inzerátu objevuje Keras
-    """
-    return obsahuje_retezec(popis_pozice, "keras")
-
-def obsahuje_python_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Python
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_python(popis_pozice)
-
-def obsahuje_javascript_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Javascript, Angular či React
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_javascript(popis_pozice)
-
-def obsahuje_java_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Java
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_java(popis_pozice)
-
-def obsahuje_c_sharp_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje C#
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_c_sharp(popis_pozice)
-
-def obsahuje_sql_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje SQl
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_sql(popis_pozice)
-
-def obsahuje_scala_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Scala
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_scala(popis_pozice)
-
-def obsahuje_elasticsearch_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Elasticsearch
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_elasticsearch(popis_pozice)
-
-def obsahuje_cpp_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje C++
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_cpp(popis_pozice)
-
-def obsahuje_netsuite_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Netsuite
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_netsuite(popis_pozice)
-
-def obsahuje_keras_inzerat(inzerat):
-    """Kontroluje, zda se v těle inzerátu objevuje Keras
-    """
-    #inzerat je fakticky list, ktery chceme slozit v jeden string
-    popis_pozice = " ".join(inzerat)
-    return obsahuje_keras(popis_pozice)
+        index_hledaneho = text.find(retezec)
+    return not index_hledaneho == -1
 
 def priprava_framu():
     """Načítá data do pandího dataframu a upravuje je
@@ -397,7 +269,7 @@ def priprava_framu():
     dataframe_inzeraty = dataframe_inzeraty[dataframe_inzeraty["plat_min"].notnull()]
     return dataframe_inzeraty, pouze_praha
 
-def vrat_slovnik_sum(dataframe_inzeraty):
+def vrat_slovnik_sum(dataframe_inzeraty, technologie):
     """Spočítá výskyty technologií v titulkách a tělech inzerátů
 
     Args:
@@ -406,31 +278,18 @@ def vrat_slovnik_sum(dataframe_inzeraty):
     Returns:
         dict: Klíče - {titulka|inzerat}_technologie, hodnoty - počet výskytů
     """
-    slovnik_sum_technologii = {
-        "titulka_python" : int(dataframe_inzeraty["titulka_python"].sum()),
-        "titulka_java" : int(dataframe_inzeraty["titulka_java"].sum()),
-        "titulka_js" : int(dataframe_inzeraty["titulka_javascript"].sum()),
-        "titulka_csharp" : int(dataframe_inzeraty["titulka_csharp"].sum()),
-        "titulka_sql" : int(dataframe_inzeraty["titulka_sql"].sum()),
-        "titulka_scala" : int(dataframe_inzeraty["titulka_scala"].sum()),
-        "titulka_elasticsearch" : int(dataframe_inzeraty["titulka_elasticsearch"].sum()),
-        "titulka_cpp" : int(dataframe_inzeraty["titulka_cpp"].sum()),
-        "titulka_netsuite" : int(dataframe_inzeraty["titulka_netsuite"].sum()),
-        "titulka_keras" : int(dataframe_inzeraty["titulka_keras"].sum()),
-        "inzerat_python" : int(dataframe_inzeraty["inzerat_python"].sum()),
-        "inzerat_java" : int(dataframe_inzeraty["inzerat_java"].sum()),
-        "inzerat_js" : int(dataframe_inzeraty["inzerat_javascript"].sum()),
-        "inzerat_csharp" : int(dataframe_inzeraty["inzerat_csharp"].sum()),
-        "inzerat_sql" : int(dataframe_inzeraty["inzerat_sql"].sum()),
-        "inzerat_scala" : int(dataframe_inzeraty["inzerat_scala"].sum()),
-        "inzerat_elasticsearch" : int(dataframe_inzeraty["inzerat_elasticsearch"].sum()),
-        "inzerat_cpp" : int(dataframe_inzeraty["inzerat_cpp"].sum()),
-        "inzerat_netsuite" : int(dataframe_inzeraty["inzerat_netsuite"].sum()),
-        "inzerat_keras" : int(dataframe_inzeraty["inzerat_keras"].sum()),
-        }
+
+    slovnik_sum_technologii = {}
+    for prvek in technologie:
+        sloupec_titulka = "titulka_" + prvek
+        sloupec_inzerat = "inzerat_" + prvek
+        print(dataframe_inzeraty[sloupec_titulka])
+        slovnik_sum_technologii[sloupec_titulka] = int(dataframe_inzeraty[sloupec_titulka].sum())
+        slovnik_sum_technologii[sloupec_inzerat] = int(dataframe_inzeraty[sloupec_inzerat].sum())
+
     return slovnik_sum_technologii
 
-def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu):
+def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu, technologie):
     """Vytváří png obrázky - histogram mezd a bar graf o zastoupení technologií
 
     Args:
@@ -453,28 +312,14 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu):
 
     plt.clf()
     #graf - boxplot - srovnavajici zastoupeni technologii
-    titulky_sumy = (pocet_vyskytu["titulka_python"],
-                    pocet_vyskytu["titulka_java"],
-                    pocet_vyskytu["titulka_js"],
-                    pocet_vyskytu["titulka_csharp"],
-                    pocet_vyskytu["titulka_sql"],
-                    pocet_vyskytu["titulka_scala"],
-                    pocet_vyskytu["titulka_elasticsearch"],
-                    pocet_vyskytu["titulka_cpp"],
-                    pocet_vyskytu["titulka_netsuite"],
-                    pocet_vyskytu["titulka_keras"]
-                    )
-    inzeraty_sumy = (pocet_vyskytu["inzerat_python"],
-                     pocet_vyskytu["inzerat_java"],
-                     pocet_vyskytu["inzerat_js"],
-                     pocet_vyskytu["inzerat_csharp"],
-                     pocet_vyskytu["inzerat_sql"],
-                     pocet_vyskytu["inzerat_scala"],
-                     pocet_vyskytu["inzerat_elasticsearch"],
-                     pocet_vyskytu["inzerat_cpp"],
-                     pocet_vyskytu["inzerat_netsuite"],
-                     pocet_vyskytu["inzerat_keras"]
-                     )
+    titulky_sumy = []
+    inzeraty_sumy = []
+    for prvek in technologie:
+        sloupec_titulka = "titulka_" + prvek
+        sloupec_inzerat = "inzerat_" + prvek
+        titulky_sumy.append(pocet_vyskytu[sloupec_titulka])
+        inzeraty_sumy.append(pocet_vyskytu[sloupec_inzerat])
+
     osy = plt.axes()
     stredy_baru = np.arange(len(titulky_sumy))
 
@@ -491,8 +336,7 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu):
                             label="Těla inzerátů")
 
     osy.set_xticks(stredy_baru)
-    osy.set_xticklabels(("Python", "Java", "Javascript", "C#", "SQL", "Scala",
-                         "Elasticsearch", "C++", "Netsuite", "Keras"))
+    osy.set_xticklabels(technologie)
     osy.legend()
     plt.title(f"Počet výskytů technologií v inzerátech na jobs.cz ({lokace})")
     plt.savefig(f".\\grafy\\srovnani_tech_{aktualni_datum()}.png")
@@ -530,6 +374,8 @@ def vytvoreni_pdf(dataframe_inzeraty, pouze_praha):
 
 if __name__ == '__main__':
     smazani_dnesniho_souboru()
+    with open("technologies.yaml") as file:
+        technologies = yaml.load(file, Loader=yaml.FullLoader)
     crawler = CrawlerProcess({
         "USER_AGENT": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)",
         "FEED_FORMAT": "csv",
@@ -537,11 +383,11 @@ if __name__ == '__main__':
         "LOG_LEVEL" : "WARN"
         })
     print("Scrapování začíná")
-    crawler.crawl(InzeratyJobsSpider)
+    crawler.crawl(InzeratyJobsSpider, technologies)
     crawler.start()
 
     inzeraty, jen_praha_flag = priprava_framu()
-    sumy_tech = vrat_slovnik_sum(inzeraty)
-    vytvoreni_obrazku(inzeraty, jen_praha_flag, sumy_tech)
+    sumy_tech = vrat_slovnik_sum(inzeraty, technologies["technologies"])
+    vytvoreni_obrazku(inzeraty, jen_praha_flag, sumy_tech, technologies["technologies"])
     vytvoreni_pdf(inzeraty, jen_praha_flag)
     print("Report byl vyroben")

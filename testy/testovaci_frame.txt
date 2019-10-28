@@ -1,3 +1,3 @@
-pozice,zamestnavatel,adresa,Praha,plat,plat_min,plat_max,platnost od,platnost do,titulka_python,titulka_java,titulka_javascript,titulka_csharp,titulka_sql,titulka_scala,inzerat,inzerat_python,inzerat_java,inzerat_javascript,inzerat_csharp,inzerat_sql,inzerat_scala
-neco,neco,neco,neco,neco,neco,neco,neco,neco,0,1,0,0,0,0,neco,1,1,0,0,0,0
-neco,neco,neco,neco,neco,neco,neco,neco,neco,0,0,0,0,0,1,neco,0,1,1,0,0,0
+pozice,zamestnavatel,adresa,Praha,plat,plat_min,plat_max,platnost od,platnost do,titulka_python,titulka_java,titulka_javascript,inzerat,inzerat_python,inzerat_java,inzerat_javascript
+neco1,neco2,neco3,neco4,neco5,neco6,neco7,neco8,neco9,0,1,0,neco10,1,1,0
+neco,neco,neco,neco,neco,neco,neco,neco,neco,0,0,0,neco,0,1,1
