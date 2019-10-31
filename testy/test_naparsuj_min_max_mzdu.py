@@ -1,5 +1,6 @@
 from scrapovani_jobs import naparsuj_min_max_mzdu
 
+
 def test_rozpeti_od_do():
     mzda = "25 000 - 35 000 Kč"
     ocekavane_min = 25000
@@ -8,6 +9,7 @@ def test_rozpeti_od_do():
     assert ocekavane_min == vracene_min
     assert ocekavane_max == vracene_max
 
+
 def test_jen_jedna_castka():
     mzda = "25 000 Kč"
     ocekavane_min = 25000
@@ -15,7 +17,8 @@ def test_jen_jedna_castka():
     vracene_min, vracene_max = naparsuj_min_max_mzdu(mzda)
     assert ocekavane_min == vracene_min
     assert ocekavane_max == vracene_max
-    
+
+
 def test_mzda_v_eurech_jen_jedna_castka():
     mzda = "1 000 EUR"
     ocekavane_min = 25500
@@ -23,6 +26,7 @@ def test_mzda_v_eurech_jen_jedna_castka():
     vracene_min, vracene_max = naparsuj_min_max_mzdu(mzda)
     assert ocekavane_min == vracene_min
     assert ocekavane_max == vracene_max
+
 
 def test_mzda_v_eurech_od_do():
     mzda = "1 000 - 2 000 EUR"

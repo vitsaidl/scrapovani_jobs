@@ -16,43 +16,57 @@ from matplotlib.ticker import MaxNLocator
 import matplotlib.pyplot as plt
 import scrapy
 from scrapy.crawler import CrawlerProcess
+from typing import Union, Tuple, List, Dict
 
 
 class Pdf(fpdf.FPDF):
     """Třída umožňující narozdíl od defaultní fpdf.FPDF zobrazení zápatí
     """
-    def footer(self):
+
+    def footer(self) -> None:
         self.set_y(-15)
         self.set_font("Times", "I", 10)
         datum = datetime.datetime.now().strftime("%d. %m. %Y")
         self.cell(0, 10, f"Datum platnosti {datum}", 0, 0, "L")
         self.cell(0, 10, f"Strana {self.page_no()}", 0, 0, "R")
 
+
 class InzeratyJobsSpider(scrapy.Spider):
     """Třída zajišťující dolování informací ze stránek
     """
-    name = 'inzeraty_for'
-    start_urls = ['https://www.jobs.cz/prace/is-it-vyvoj-aplikaci-a-systemu/']
 
-    def __init__(self, *args):
+    name = "inzeraty_for"
+    start_urls = ["https://www.jobs.cz/prace/is-it-vyvoj-aplikaci-a-systemu/"]
+
+    def __init__(self, *args) -> None:
         self.technologies = args[0]["technologies"]
 
     def parse(self, response):
         """Defaultně volaná fce koukající na seznam inzerátů
         """
-        dalsi_strana_selector = "a.button.button--slim.pager__next ::attr(href)"
+        dalsi_strana_selector = (
+            "a.button.button--slim.pager__next ::attr(href)"
+        )
         dalsi_strana = response.css(dalsi_strana_selector).extract_first()
         if dalsi_strana:
-            yield scrapy.Request(response.urljoin(dalsi_strana), callback=self.parse)
+            yield scrapy.Request(
+                response.urljoin(dalsi_strana), callback=self.parse
+            )
 
-        for prvek in response.css('div.standalone.search-list__item'):
+        for prvek in response.css("div.standalone.search-list__item"):
             pozice_selector = ".search-list__main-info__title__link ::text"
             zamestnavatel_selector = ".search-list__main-info__company ::text"
-            adresa_selector = ".search-list__main-info__address :nth-child(2) ::text"
+            adresa_selector = (
+                ".search-list__main-info__address :nth-child(2) ::text"
+            )
             platy_selector = ".search-list__salary :nth-child(2) ::text"
-            platnost_od = "span.label-added ::attr(data-label-added-valid-from)"
+            platnost_od = (
+                "span.label-added ::attr(data-label-added-valid-from)"
+            )
             platnost_do = "span.label-added ::attr(data-label-added-valid-to)"
-            odkaz_selector = "a.search-list__main-info__title__link ::attr(href)"
+            odkaz_selector = (
+                "a.search-list__main-info__title__link ::attr(href)"
+            )
 
             pozice = prvek.css(pozice_selector).extract_first()
             zamestnavatel = prvek.css(zamestnavatel_selector).extract_first()
@@ -63,35 +77,43 @@ class InzeratyJobsSpider(scrapy.Spider):
             odkaz = prvek.css(odkaz_selector).extract_first()
 
             metaslovnik = {
-                "pozice" : pozice,
-                "zamestnavatel" : zamestnavatel,
-                "adresa" : adresa,
-                "platy" : platy,
-                "platnost_od" : platnost_od,
-                "platnost_do" : platnost_do
-                }
-            #v prvcích jsou i neinzerátové věci, které ale v sobě pozice_selector
-            #nemají
+                "pozice": pozice,
+                "zamestnavatel": zamestnavatel,
+                "adresa": adresa,
+                "platy": platy,
+                "platnost_od": platnost_od,
+                "platnost_do": platnost_do,
+            }
+            # v prvcích jsou i neinzerátové věci,
+            # které ale v sobě pozice_selector
+            # nemají
             if pozice is not None:
-                yield response.follow(odkaz, self.parsuj_inzerat, meta=metaslovnik)
+                yield response.follow(
+                    odkaz, self.parsuj_inzerat, meta=metaslovnik
+                )
 
     def parsuj_inzerat(self, response):
-        """Fce volaná dcí parse; kouká na jendotlivé inzeráty
+        """Fce volaná fcí parse; kouká na jendotlivé inzeráty
         """
         pozice = response.meta["pozice"]
         zamestnavatel = response.meta["zamestnavatel"]
         adresa = response.meta["adresa"]
 
         platy = response.meta["platy"]
+        plat_bez_bilych_znaku = usekej_bile_znaky_prostredek(
+            usekej_bile_znaky_okraj(platy)
+        )
+        plat_minimum, plat_maximum = naparsuj_min_max_mzdu(
+            plat_bez_bilych_znaku
+        )
         platnost_od = response.meta["platnost_od"]
         platnost_do = response.meta["platnost_do"]
-        plat_bez_bilych_znaku = usekej_bile_znaky_prostredek(usekej_bile_znaky_okraj(platy))
-        plat_minimum, plat_maximum = naparsuj_min_max_mzdu(plat_bez_bilych_znaku)
+
         ocistena_pozice = usekej_bile_znaky_okraj(pozice)
 
-        #krom defaultní šablony inzerátů existují i custom šablony
-        #jeden typ byl u lmc, jiný u t-mobilu
-        #používají je ale i jiné firmy
+        # krom defaultní šablony inzerátů existují i custom šablony
+        # jeden typ byl u lmc, jiný u t-mobilu
+        # používají je ale i jiné firmy
         telo_inz_klasik_sel = "div.standalone.jobad__body ::text"
         telo_inz_lmc_sel = "div.cse-block.offset-bottom--large ::text"
         telo_inz_tmobile_sel = "div.cse-block ::text"
@@ -108,24 +130,28 @@ class InzeratyJobsSpider(scrapy.Spider):
             telo_inzeratu = telo_inz_tmobile
 
         slovnik_informaci = {
-            'pozice' : ocistena_pozice,
-            'zamestnavatel': usekej_bile_znaky_okraj(zamestnavatel),
-            'adresa': usekej_bile_znaky_okraj(adresa),
-            'Praha' : obsahuje_retezec(adresa, "praha"),
-            'plat': plat_bez_bilych_znaku,
-            'plat_min': plat_minimum,
-            'plat_max': plat_maximum,
-            'platnost od' : vrat_datum_z_timestampy(platnost_od),
-            'platnost do' : vrat_datum_z_timestampy(platnost_do),
-            'inzerat' : telo_inzeratu,
-            }
+            "pozice": ocistena_pozice,
+            "zamestnavatel": usekej_bile_znaky_okraj(zamestnavatel),
+            "adresa": usekej_bile_znaky_okraj(adresa),
+            "Praha": obsahuje_retezec(adresa, "praha"),
+            "plat": plat_bez_bilych_znaku,
+            "plat_min": plat_minimum,
+            "plat_max": plat_maximum,
+            "platnost od": vrat_datum_z_timestampy(platnost_od),
+            "platnost do": vrat_datum_z_timestampy(platnost_do),
+            "inzerat": telo_inzeratu,
+        }
 
         for element in self.technologies:
             klic_titulka = "titulka_" + element
             klic_inzerat = "inzerat_" + element
             inzerat_string = " ".join(telo_inzeratu)
-            slovnik_informaci[klic_titulka] = obsahuje_retezec(ocistena_pozice, element)
-            slovnik_informaci[klic_inzerat] = obsahuje_retezec(inzerat_string, element)
+            slovnik_informaci[klic_titulka] = obsahuje_retezec(
+                ocistena_pozice, element
+            )
+            slovnik_informaci[klic_inzerat] = obsahuje_retezec(
+                inzerat_string, element
+            )
 
         yield slovnik_informaci
 
@@ -134,7 +160,8 @@ class InzeratyJobsSpider(scrapy.Spider):
         """
         print("Informace z jobs.cz byly vydolovány.")
 
-def aktualni_datum():
+
+def aktualni_datum() -> str:
     """Vrací aktuální datum ve formátu DDMMYY, např. 220619 pro 22. 6. 2019
 
     Returns:
@@ -142,7 +169,8 @@ def aktualni_datum():
     """
     return datetime.datetime.now().strftime("%d%m%y")
 
-def smazani_dnesniho_souboru():
+
+def smazani_dnesniho_souboru() -> None:
     """Maže soubor se scrapovanými daty za aktuální datum
 
     Scrapy při opětovném běhu cílový soubor nemaže, ale k němu appenduje.
@@ -153,8 +181,10 @@ def smazani_dnesniho_souboru():
     if soubor_existuje:
         os.remove(f".\\scrapovana_data\\{jmeno_souboru}")
 
-def usekej_bile_znaky_okraj(retezec):
-    """Vrací slovo očištěné o bíle znaky na začátku/konci řetězce, resp. "Neuvedeno"
+
+def usekej_bile_znaky_okraj(retezec: Union[str, None]) -> str:
+    """Vrací slovo očištěné o bíle znaky na začátku/konci
+    řetězce, resp. "Neuvedeno"
 
     "Neuvedeno" se vrátí v případě, že žádný řetězec nebyl naparsován (obvykle
     nastává u platu).
@@ -169,7 +199,8 @@ def usekej_bile_znaky_okraj(retezec):
         return "Neuvedeno"
     return retezec.strip()
 
-def usekej_bile_znaky_prostredek(retezec):
+
+def usekej_bile_znaky_prostredek(retezec: str) -> str:
     """Hromadu bílých znaků uprostřed řetězce nahrazuje za jednu mezeru
 
     Args:
@@ -182,7 +213,8 @@ def usekej_bile_znaky_prostredek(retezec):
     znovuspojeny_retezec = " ".join(separovany_retezec)
     return znovuspojeny_retezec
 
-def vrat_datum_z_timestampy(timestampa):
+
+def vrat_datum_z_timestampy(timestampa: str) -> str:
     """Vrací datum (pokud přijde timestampa) či "Neuvedeno" (pokud přijde None)
 
     Args:
@@ -196,15 +228,22 @@ def vrat_datum_z_timestampy(timestampa):
         return separovana_timestampa[0]
     return "Neuvedeno"
 
-def naparsuj_min_max_mzdu(platove_rozpeti):
+
+def naparsuj_min_max_mzdu(
+    platove_rozpeti: str
+) -> Tuple[Union[str, int], Union[str, int]]:
     """Z řetězce vybere max a min hodnotu mzdy + přepočítá případné eura na koruny
 
     Args:
-        platove_rozpeti (string/None): Formát řetězce buďto X Kč - Y Kč, anebo X Kč
+        platove_rozpeti (string): Formát řetězce buďto
+        X Kč - Y Kč, anebo X Kč
 
     Returns:
         integer: Dva integery - minimální a maximální nabízená mzda v Kč
     """
+    minimum: Union[str, int]
+    maximum: Union[str, int]
+
     kurs_euro = 25.5
     rozpeti_bez_mezer = platove_rozpeti.replace(" ", "")
 
@@ -219,13 +258,19 @@ def naparsuj_min_max_mzdu(platove_rozpeti):
         minimum = int(matchnuti.group(1))
         maximum = int(matchnuti.group(2))
 
-    if (matchnuti is not None and matchnuti.group(3) == "EUR"):
+    if (
+        isinstance(minimum, int)
+        and isinstance(maximum, int)
+        and matchnuti is not None
+        and matchnuti.group(3) == "EUR"
+    ):
         minimum = round(kurs_euro * minimum)
         maximum = round(kurs_euro * maximum)
 
     return minimum, maximum
 
-def obsahuje_retezec(text, retezec):
+
+def obsahuje_retezec(text: str, retezec: str) -> bool:
     """Vrací True/False na zákadě toho, zda text obsahuje retezec
 
     Args:
@@ -237,7 +282,7 @@ def obsahuje_retezec(text, retezec):
     """
     text = text.lower()
     retezec = retezec.lower()
-    #aby se do javy nezapocitaval i javascript
+    # aby se do javy nezapocitaval i javascript
     if retezec == "java":
         matchnuti = re.search("java[^s]", text)
         index_hledaneho = 1 if matchnuti is not None else -1
@@ -245,35 +290,50 @@ def obsahuje_retezec(text, retezec):
         index_hledaneho = text.find(retezec)
     return not index_hledaneho == -1
 
-def priprava_framu():
+
+def priprava_framu() -> Tuple[pd.DataFrame, bool]:
     """Načítá data do pandího dataframu a upravuje je
 
     Returns:
         dataframe: Pandí dataframe - co řádek, to inzerát
-        bool: Info o tom, zda chce uživatel jen informace o Praze (True) či o celé ČR
+        bool: Info o tom, zda chce uživatel jen informace
+        o Praze (True) či o celé ČR
     """
     nazev_zdroj_souboru = f".\\scrapovana_data\\prace_{aktualni_datum()}.csv"
     dataframe_inzeraty = pd.read_csv(nazev_zdroj_souboru, header=0, sep=",")
     chce_prahu = input("Chcete mít ve statistice pouze Prahu (Ano/Ne)?\n")
-    if chce_prahu in ("Ano", "ANO", "ano"):
-        dataframe_inzeraty = dataframe_inzeraty[dataframe_inzeraty["Praha"] == True]
+    if chce_prahu.lower() == "ano":
+        dataframe_inzeraty = dataframe_inzeraty[
+            dataframe_inzeraty["Praha"] == True
+        ]
         pouze_praha = True
     else:
         pouze_praha = False
-    dataframe_inzeraty = dataframe_inzeraty[dataframe_inzeraty["plat_min"].notnull()]
-    #"Neuvedeno" se zde převede na NaN
-    dataframe_inzeraty["plat_min"] = dataframe_inzeraty["plat_min"].apply(pd.to_numeric,
-                                                                          errors='coerce')
-    dataframe_inzeraty["plat_max"] = dataframe_inzeraty["plat_max"].apply(pd.to_numeric,
-                                                                          errors='coerce')
-    dataframe_inzeraty = dataframe_inzeraty[dataframe_inzeraty["plat_min"].notnull()]
+    dataframe_inzeraty = dataframe_inzeraty[
+        dataframe_inzeraty["plat_min"].notnull()
+    ]
+    # "Neuvedeno" se zde převede na NaN
+    dataframe_inzeraty["plat_min"] = dataframe_inzeraty["plat_min"].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    dataframe_inzeraty["plat_max"] = dataframe_inzeraty["plat_max"].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    dataframe_inzeraty = dataframe_inzeraty[
+        dataframe_inzeraty["plat_min"].notnull()
+    ]
     return dataframe_inzeraty, pouze_praha
 
-def vrat_slovnik_sum(dataframe_inzeraty, technologie):
+
+def vrat_slovnik_sum(
+    dataframe_inzeraty: pd.DataFrame, technologie: List[str]
+) -> Dict[str, int]:
     """Spočítá výskyty technologií v titulkách a tělech inzerátů
 
     Args:
         dataframe_inzeraty (dataframe): Pandí dataframe s infem o inzerátech
+        technologie (List[str]): Jednoslovný (resp. užívající _) název
+        technologie
 
     Returns:
         dict: Klíče - {titulka|inzerat}_technologie, hodnoty - počet výskytů
@@ -283,26 +343,46 @@ def vrat_slovnik_sum(dataframe_inzeraty, technologie):
     for prvek in technologie:
         sloupec_titulka = "titulka_" + prvek
         sloupec_inzerat = "inzerat_" + prvek
-        print(dataframe_inzeraty[sloupec_titulka])
-        slovnik_sum_technologii[sloupec_titulka] = int(dataframe_inzeraty[sloupec_titulka].sum())
-        slovnik_sum_technologii[sloupec_inzerat] = int(dataframe_inzeraty[sloupec_inzerat].sum())
+        slovnik_sum_technologii[sloupec_titulka] = int(
+            dataframe_inzeraty[sloupec_titulka].sum()
+        )
+        slovnik_sum_technologii[sloupec_inzerat] = int(
+            dataframe_inzeraty[sloupec_inzerat].sum()
+        )
 
     return slovnik_sum_technologii
 
-def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu, technologie):
+
+def vytvoreni_obrazku(
+    dataframe_inzeraty: pd.DataFrame,
+    pouze_praha: bool,
+    pocet_vyskytu: Dict[str, int],
+    technologie: List[str],
+) -> None:
     """Vytváří png obrázky - histogram mezd a bar graf o zastoupení technologií
 
     Args:
         dataframe_inzeraty (dataframe): Informace o inzerátech
-        pouze_praha (bool): Zda jsou data platná jen pro Prahu (True) či celou ČR
-        pocet_vyskytu (dict): Mapuje technologii na počet jejího výskytu v inzerátech
+        pouze_praha (bool): Zda jsou data platná jen pro Prahu (True)
+        či celou ČR
+        pocet_vyskytu (dict): Mapuje technologii na počet jejího výskytu
+        v inzerátech
+        technologie (List[str]): Jednoslovný (resp. užívající _) název
+        technologie
     """
     fig_mzdy = plt.figure(figsize=(10, 6))
-    plt.hist([dataframe_inzeraty["plat_min"], dataframe_inzeraty["plat_max"]], 50)
+    plt.hist(
+        [dataframe_inzeraty["plat_min"], dataframe_inzeraty["plat_max"]], 50
+    )
     plt.xlabel("Mzda v Kč")
     plt.ylabel("Počet pozic")
-    plt.legend(["Spodní hranice mzdového intervalu", "Horní hranice mzdového intervalu"],
-               loc=1)
+    plt.legend(
+        [
+            "Spodní hranice mzdového intervalu",
+            "Horní hranice mzdového intervalu",
+        ],
+        loc=1,
+    )
     if pouze_praha:
         lokace = "jen Praha"
     else:
@@ -311,7 +391,7 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu, technologi
     plt.savefig(f".\\grafy\\histogram_mzdy_{aktualni_datum()}.png")
 
     plt.clf()
-    #graf - boxplot - srovnavajici zastoupeni technologii
+    # graf - boxplot - srovnavajici zastoupeni technologii
     titulky_sumy = []
     inzeraty_sumy = []
     for prvek in technologie:
@@ -323,17 +403,22 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu, technologi
     osy = plt.axes()
     stredy_baru = np.arange(len(titulky_sumy))
 
-    #aby byly na yové ose jen integery
+    # aby byly na yové ose jen integery
     osy.yaxis.set_major_locator(MaxNLocator(integer=True))
     sirka_baru = 0.35
-    levy_sloupec = osy.bar(stredy_baru - sirka_baru/2,
-                           titulky_sumy,
-                           sirka_baru,
-                           label="Titulky inzerátů")
-    pravy_sloupec = osy.bar(stredy_baru + sirka_baru/2,
-                            inzeraty_sumy,
-                            sirka_baru,
-                            label="Těla inzerátů")
+
+    levy_sloupec = osy.bar(
+        stredy_baru - sirka_baru / 2,
+        titulky_sumy,
+        sirka_baru,
+        label="Titulky inzerátů",
+    )
+    pravy_sloupec = osy.bar(
+        stredy_baru + sirka_baru / 2,
+        inzeraty_sumy,
+        sirka_baru,
+        label="Těla inzerátů",
+    )
 
     osy.set_xticks(stredy_baru)
     osy.set_xticklabels(technologie)
@@ -341,12 +426,14 @@ def vytvoreni_obrazku(dataframe_inzeraty, pouze_praha, pocet_vyskytu, technologi
     plt.title(f"Počet výskytů technologií v inzerátech na jobs.cz ({lokace})")
     plt.savefig(f".\\grafy\\srovnani_tech_{aktualni_datum()}.png")
 
-def vytvoreni_pdf(dataframe_inzeraty, pouze_praha):
+
+def vytvoreni_pdf(dataframe_inzeraty: pd.DataFrame, pouze_praha: bool) -> None:
     """Funkce vytváří pdf soubor se souhrnými informacemi
 
     Args:
         dataframe_inzeraty (dataframe): Informace o inzerátech
-        pouze_praha (bool): Zda jsou data platná jen pro Prahu (True) či celou ČR
+        pouze_praha (bool): Zda jsou data platná jen
+        pro Prahu (True) či celou ČR
     """
     report = Pdf()
     report.add_page()
@@ -360,34 +447,45 @@ def vytvoreni_pdf(dataframe_inzeraty, pouze_praha):
     report.cell(w=0, h=10, txt=text_nadpisu, ln=1, align="C")
 
     report.set_font("Times", "", 14)
-    report.image(name=f".\\grafy\\histogram_mzdy_{aktualni_datum()}.png", w=180)
+    report.image(
+        name=f".\\grafy\\histogram_mzdy_{aktualni_datum()}.png", w=180
+    )
     median_min_platu = int(dataframe_inzeraty["plat_min"].median())
     median_max_platu = int(dataframe_inzeraty["plat_max"].median())
-    text_median = ("Mediánová hodnota spodní hranice nabízených mezd v "
-                   f"{oblast_platnosti} činí {median_min_platu} Kč. Medián horní "
-                   f"hranice představuje {median_max_platu} Kč.")
+    text_median = (
+        "Mediánová hodnota spodní hranice nabízených mezd v "
+        f"{oblast_platnosti} činí {median_min_platu} Kč. Medián horní "
+        f"hranice představuje {median_max_platu} Kč."
+    )
     report.multi_cell(w=0, h=10, txt=text_median)
     report.image(name=f".\\grafy\\srovnani_tech_{aktualni_datum()}.png", w=180)
 
-    nazev_souboru = f".\\reporty\\jobs_{datetime.datetime.now().strftime('%d%m%y')}.pdf"
+    nazev_souboru = (
+        f".\\reporty\\jobs_{datetime.datetime.now().strftime('%d%m%y')}.pdf"
+    )
     report.output(name=nazev_souboru, dest="F")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     smazani_dnesniho_souboru()
     with open("technologies.yaml") as file:
         technologies = yaml.load(file, Loader=yaml.FullLoader)
-    crawler = CrawlerProcess({
-        "USER_AGENT": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)",
-        "FEED_FORMAT": "csv",
-        "FEED_URI": f"scrapovana_data\\prace_{aktualni_datum()}.csv",
-        "LOG_LEVEL" : "WARN"
-        })
+    crawler = CrawlerProcess(
+        {
+            "USER_AGENT": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)",
+            "FEED_FORMAT": "csv",
+            "FEED_URI": f"scrapovana_data\\prace_{aktualni_datum()}.csv",
+            "LOG_LEVEL": "WARN",
+        }
+    )
     print("Scrapování začíná")
     crawler.crawl(InzeratyJobsSpider, technologies)
     crawler.start()
 
     inzeraty, jen_praha_flag = priprava_framu()
     sumy_tech = vrat_slovnik_sum(inzeraty, technologies["technologies"])
-    vytvoreni_obrazku(inzeraty, jen_praha_flag, sumy_tech, technologies["technologies"])
+    vytvoreni_obrazku(
+        inzeraty, jen_praha_flag, sumy_tech, technologies["technologies"]
+    )
     vytvoreni_pdf(inzeraty, jen_praha_flag)
     print("Report byl vyroben")
